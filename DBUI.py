@@ -1,4 +1,5 @@
 import pyodbc
+import requests
 
 
 print ('Initiated program')
@@ -74,6 +75,8 @@ while(True):
 # #read data and check about date range values.
 # cursor.execute('SELECT * FROM medicalRecord WHERE [First name]=? and [Last name]=? and [LOINC NUM]=? and [Transaction time] between ? and ?'
 # ,"Eyal","Rothman","11218-5", "21/5/2018 10:00","22/5/2018 10:00")
+=======
+# cursor.execute('select * from medicalRecord')
    
 # for row in cursor.fetchall():
 #    # if(row.__contains__("13:11:00")):
