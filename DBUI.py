@@ -1,6 +1,7 @@
 import pyodbc
 import requests
 
+
 print ('Initiated program')
 
 conn = pyodbc.connect(r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:DB.accdb;')
@@ -45,7 +46,61 @@ while(True):
 
     inp = int(input('Task number: '))
     tasks[inp]()
+
+
+# The program UI
+# print('name')
+# while(True):
+#     inp = input('Query: ').split()
+#     tasks[inp[0]](inp)
+
+
+
+##########################################fetch###############################
+#lonic = input("lonic: ")
+#name = input("name: ")
+#component = input("component: ")
+#lonic = input("lonic :")
+#date = input("date: ")
+# hour = date hour splited
+# askedIn = input("asking in question in(enter 0 for "now"):")
+# check askedIn
+
+# cursor.execute('SELECT * FROM medicalRecord WHERE [First name]=? and [Last name]=? and [LOINC NUM]=?',"Eli","Call","11218-5")
+   
+# for row in cursor.fetchall():
+#         print (row)
+
+########################################fetch history ###########################
+# #read data and check about date range values.
+# cursor.execute('SELECT * FROM medicalRecord WHERE [First name]=? and [Last name]=? and [LOINC NUM]=? and [Transaction time] between ? and ?'
+# ,"Eyal","Rothman","11218-5", "21/5/2018 10:00","22/5/2018 10:00")
+=======
 # cursor.execute('select * from medicalRecord')
    
 # for row in cursor.fetchall():
-#     print (row)
+#    # if(row.__contains__("13:11:00")):
+#         print (row)
+
+
+###############################needs to be done at the start ##############################
+# add a deleted column at the start of the program if cloumn doesnt exists
+try:
+    cursor.execute('ALTER TABLE medicalRecord ADD deleted text')
+    cursor.commit()
+except:
+    pass
+############################################# insert a new row ##################################
+cursor.execute('INSERT INTO medicalRecord ([First name], [Value]) values (?,?)', "100","100")
+cursor.commit()
+
+
+
+
+
+
+
+
+
+
+
