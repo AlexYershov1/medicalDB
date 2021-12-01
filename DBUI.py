@@ -1,13 +1,8 @@
-from typing import NoReturn
 import pyodbc
 import re
-import csv
-#import pandas
 from datetime import datetime
 
 print('Initiated program')
-cases = (True, False, 'special')
-
 
 def printData(columns, row) -> None:
     print()
@@ -15,10 +10,9 @@ def printData(columns, row) -> None:
     for column, word in zip(columns, row):
         print(column + ': ' + str(word) + ', ', end=' ')
     print()
-    print()
     
 
-def valid_date(s: str) -> bool:
+def valid_date(s: str):
     try:
         mat = re.match(
             '((\d{1,2})[/.-](\d{1,2})[/.-](\d{4})) (0|(\d{1,2}):(\d{1,2}))', s)
@@ -45,59 +39,29 @@ def valid_date(s: str) -> bool:
     return False
 
 
-print('Do you wish to proceed with the existing database or switch to a different one?')
-
 conn = pyodbc.connect(
     r'Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=C:DB.accdb;')
 cursor = conn.cursor()
 
 print('connection to DB established')
 
-# for row in cursor.columns(table='medicalRecord'):
-#         print(row.data_type)
-
-# switching
-answer = ''
-#while(answer != 's' and answer != 'p' and answer != 'a'):
- #   answer = input('press p to procceed, s to switch, a to add: ')
-if answer == 'a':
-
-    file = open('testcsv.xlsx', 'r').read()
-    for line in file:
-        print(line)
-        # Create query over here
-        try:
-            strSQL = "ALTER TABLE medicalRecord INSERT deleted INTEGER"
-            cursor.execute(strSQL)
-            conn.commit()
-        except:
-            pass
-
-    strSQL = "SELECT * INTO medicalRecord FROM [text;HDR=Yes;FMT=Delimited(,);" + \
-        "Database=C:].testcsv.csv;"
-    cursor.execute(strSQL)
-    conn.commit()
-# if answer == 's':
-#     strSQL = "SELECT * INTO medicalRecord FROM [text;HDR=Yes;FMT=Delimited(,);" + \
-#          "Database=C:].newDB.csv;"
-#     cursor.execute(strSQL)
-#     conn.commit()
-
 
 class lonicDB:
-    def __init__(self) -> None:
+    def __init__(self, tableName) -> None:
+        self.tableName = tableName
+
         global cursor
         try:
-            cursor.execute('ALTER TABLE medicalRecord ADD deleted datetime')
+            cursor.execute(f'ALTER TABLE {tableName} ADD deleted datetime')
             cursor.commit()
         except:
             pass
         try:
             cursor.execute(
-                'ALTER TABLE medicalRecord ADD LONG_COMMON_NAME text')
+                f'ALTER TABLE {tableName} ADD LONG_COMMON_NAME text')
             cursor.commit()
 
-            cursor.execute('SELECT [LOINC-NUM] from medicalRecord')
+            cursor.execute(f'SELECT [LOINC-NUM] from {tableName}')
             loincs = cursor.fetchall()
             loincSet = set()
             [loincSet.add(x[0]) for x in loincs]
@@ -108,213 +72,255 @@ class lonicDB:
                 lcn = cursor.fetchone()
                 if lcn:
                     cursor.execute(
-                        'UPDATE medicalRecord SET [LONG_COMMON_NAME]=? WHERE [LOINC-NUM]=?', lcn[2], loinc)
+                        f'UPDATE {tableName} SET [LONG_COMMON_NAME]=? WHERE [LOINC-NUM]=?', lcn[2], loinc)
             cursor.commit()
         except:
             pass
+        
+    @property
+    def name(self):
+        return self.tableName
+    @name.setter
+    def name(self, newData):
+        self.tableName = newData
+
+    def select(self):
+        loinc = input("enter lonic-num or component: ")
+        first_name = input("enter first name: ")
+        last_name = input("enter last name: ")
+        date = input("date: ")
+        viewPointDate = input("searching at(enter 0 for now): ")
+        date2 =""
+        datevalid = valid_date(date)
+        if(datevalid == 'special'):
+            date = date[:-1]
+            date2 = date
+            date += "00:00"
+            date2 += "23:59"
+        elif(datevalid == True):
+            date2 = date
+        else:
+            print("invalid date")
+            return
+
+        if (viewPointDate == '0'):
+            viewPointDate = datetime.now().strftime("%d/%m/%Y %H:%M")
+        elif(viewPointDate != True):
+            print("invalid searching at date")
+            return
+    
+        #first_name, last_name, loinc, date, viewPointDate = 'Eyal', 'Rothman', '11218-5', '18-5-2018 11:00', datetime.now().strftime("%d/%m/%Y %H:%M")
+        #date2 = date
+        cursor.execute(f'SELECT * FROM {self.name} WHERE [First name]=? and [Last name]=? and [LOINC-NUM]=?\
+            and [Valid start time] between ? and ? and [Transaction time] <= ? order by [Valid start time] desc',
+                    first_name, last_name, loinc, date, date2, viewPointDate)
+
+        rows = cursor.fetchall()
+        if (len(rows) == 0):
+            print("could not find such case that meets the criteria specified")
+            return
+
+        # get fields names and index of te deleted field
+        columns = [column[0] for column in cursor.description]  
+        index = [column[0] for column in cursor.description].index('deleted')
+
+        for row in rows:
+            if(row[index] == None or row[index] > datetime.strptime(viewPointDate, "%d/%m/%Y %H:%M")): #no way that this throw excp?
+                printData(columns, row)
+                return
+                
+        print("could not find such case that meets the criteria specified")
+        return
+
+
+    def history(self):
+        loinc = input("enter loinc-num or component : ")
+        first_name = input("enter first name: ")
+        last_name = input("enter last name: ")
+        dateDis = input("enter the valid date time and hour to display from, 0 hour for all day: ")
+        dateDis2 = ""
+        fromd = input("enter transaction time range, from (0 for 1/1/1900 till now, 0 at hour only = from 00:00):")
+        if (fromd != '0'):
+            tod = input("to transaction time date and hour (enter 0 at hour for 23:59): ")
+        else:
+            fromd = "1/1/1900 0:00"
+            tod = datetime.now().strftime("%d/%m/%Y %H:%M")
+        if(valid_date(fromd) == False or valid_date(tod) == False):
+            print("invalid dates range")
+            return
+        elif(valid_date(fromd) == 'special'):
+            if(valid_date(tod) == 'special'):
+                tod = tod[:-1] + "23:59" # not sure thats what she wants here, do i need to print an error? 
+            fromd = fromd[:-1] + "00:00"
+
+        validDate = valid_date(dateDis)
+        if(validDate == 'special'):
+            dateDis = dateDis[:-1]
+            dateDis2 = dateDis
+            dateDis += "00:00"
+            dateDis2 += "23:59"
+        elif(validDate == True):
+            dateDis2 = dateDis
+        else:
+            print("invalid date")
+
+        cursor.execute(f'SELECT * FROM {self.name} WHERE [First name]=? and [Last name]=?\
+            and ([LOINC-NUM]=? or [LOINC-NUM]=?) and [Valid start time] between ? and ? and [Transaction time] between ? and ?',
+            first_name, last_name, loinc, loinc, dateDis, dateDis2, fromd, tod)
+
+        rows = cursor.fetchall()
+        if (len(rows) == 0):
+            print("could not find such case that meets the criteria specified")
+            return
+        columns = [column[0] for column in cursor.description]  
+        index = [column[0] for column in cursor.description].index('deleted')
+
+        for row in rows:
+            if(row[index] == None or row[index] > datetime.strptime(tod, "%d/%m/%Y %H:%M") or row[index] < datetime.strptime(fromd, "%d/%m/%Y %H:%M")): 
+                printData(columns, row)
+                return
+        return
+
+
+    def update(self):
+        date = input("enter date of test enter 0 for now: ")
+        loinc = input("enter loinc num or component name: ")
+        first_name = input("enter first name: ")
+        last_name = input("enter last name: ")
+        validdate = input("enter valid time: ")
+        value = input("new value is: ")
+        if date == '0':
+            date = datetime.now().strftime("%d/%m/%Y %H:%M")
+        elif (valid_date(date) != True):
+            print("invalid date")
+            return
+        if (valid_date(validdate) != True):
+            print("invalid valid date time")
+            return
+
+
+        cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?)\
+            and [First name]=? and [Last name]=? and [Valid start time]=? order by [Transaction time] desc',
+                    loinc, loinc, first_name, last_name, validdate)
+
+        row = cursor.fetchone()
+        ## need to change here from row[5] to what alex did with row[9] ######################################
+        if(row):
+            cursor.execute(f'INSERT INTO {self.name} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time])\
+            values (?,?,?,?,?,?,?)', first_name, last_name, loinc, value, row[5], date, datetime.now().strftime("%d/%m/%Y %H:%M"))
+            cursor.commit()
+        else:
+            print("Could not Find such test to update or one of the arguments is incorrect \n")
+        return
+
 
     def delete(self):
-        global cursor
-        try:
-            cursor.execute('ALTER TABLE medicalRecord DELETE deleted')
-            cursor.commit()
-        except:
-            pass
-        try:
-            cursor.execute('ALTER TABLE medicalRecord DELETE LONG_COMMON_NAME')
-            cursor.commit()
-        except:
-            pass
+        deleted = input("deleted at:(enter 0 for now) ")
+        loinc = input("enter loinc-num or component name: ")
+        first_name = input("enter  ")
+        last_name = input("deleted at:(enter 0 for now) ")
+        valid = input("enter valid start time, enter 0 at hour for the latest update that day: ")
+        valid2 = ""
+
+        if(deleted == '0'):
+            deleted = datetime.now().strftime("%d/%m/%Y %H:%M")
+        elif (valid_date(deleted) != True):
+            print("invalid date")
+            return
+        validDate = valid_date(valid)
+        if(validDate == 'special'):
+            valid = valid[:-1]
+            valid2 = valid
+            valid += "00:00"
+            valid2 += "23:59"
+        elif(validDate == True):
+            valid2 = valid
+        else:
+            print("invalid date")
+
+        cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?) and [First name]=?\
+            and [Last name]=? and [deleted]=? and [Valid start time] between ? and ? order by [Valid start time] desc',
+                    loinc, loinc, first_name, last_name, None, valid, valid2)
+
+        row = cursor.fetchone()
+        if(row):
+            id = row[0]
+            cursor.execute(f'UPDATE {self.name} SET [deleted]=? WHERE [ID]=?', deleted,id)
+            # cursor.execute('UPDATE medicallRecord SET [deleted]=? WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?) and [First name]=?\
+            #     and [Last name]=? and [Valid start time] between ? and ? ',
+            #                deleted, loinc, loinc, first_name, last_name, valid, valid2)
+        else:
+            print("could not find such case that meets the criteria specified")
+
+        return
+
+
+def select(db: lonicDB):
+    db.select()
+
+def history(db: lonicDB):
+    db.history()
+
+def update(db: lonicDB):
+    db.update()
+
+def delete(db: lonicDB):
+    db.delete()
+
+def changeTable(dbPuppet: lonicDB):
+    global db
+    answer =''
+    while answer != 'a' and answer != 's' and answer != 'c':
+        answer = input('Choose operation <a to add, s to switch, c to cancel>: ')
     
-    def select(self):
-        pass
+    if answer == 'a':
+        newTable = ''
+        while newTable != 'c':
+            newTable = input('Enter new table name or c to cancel: ')
+            try:
+                assert cursor.execute(f'SELECT * FROM {newTable}')
+                lonicDB(newTable)
+                # cursor.execute(f'SELECT [ID], [First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time],[Transaction time],\
+                #  [deleted], [LONG_COMMON_NAME] FROM {db.name}\
+                #   UNION ALL SELECT [ID], [First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [deleted], [LONG_COMMON_NAME] FROM {newTable}')
+                cursor.execute(f'SELECT * FROM {newTable}')
+                rows = cursor.fetchall()
+                for row in rows:
+                    cursor.execute(f'INSERT INTO {db.name} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [deleted], [LONG_COMMON_NAME]) values (?,?,?,?,?,?,?,?,?)', row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
+                cursor.commit
 
-
-def select():
-    loinc = input("enter lonic-num or component: ")
-    first_name = input("enter first name: ")
-    last_name = input("enter last name: ")
-    date = input("date: ")
-    viewPointDate = input("searching at(enter 0 for now): ")
-    date2 =""
-    datevalid = valid_date(date)
-    if(datevalid == 'special'):
-        date = date[:-1]
-        date2 = date
-        date += "00:00"
-        date2 += "23:59"
-    elif(datevalid == True):
-        date2 = date
+                return
+            except:
+                pass
+    elif answer == 's':
+        newTable = ''
+        while newTable != 'c':
+            newTable = input('Enter new table name or c to cancel: ')
+            try:
+                assert cursor.execute(f'SELECT * FROM {newTable}')
+                db = lonicDB(newTable)
+                print('switch complete')
+                return
+            except :
+                pass
     else:
-        print("invalid date")
-        return
-
-    if (viewPointDate == '0'):
-        viewPointDate = datetime.now().strftime("%d/%m/%Y %H:%M")
-    elif(viewPointDate != True):
-        print("invalid searching at date")
-        return
- 
-    # first_name, last_name, loinc, date, viewPointDate = 'Eyal', 'Rothman', '11218-5', '18-5-2018 11:00', datetime.now().strftime("%d/%m/%Y %H:%M")
-    cursor.execute('SELECT * FROM medicalRecord WHERE [First name]=? and [Last name]=? and [LOINC-NUM]=?\
-        and [Valid start time] between ? and ? and [Transaction time] <= ? order by [Valid start time] desc',
-                   first_name, last_name, loinc, date, date2, viewPointDate)
-
-    rows = cursor.fetchall()
-    if (len(rows) == 0):
-        print("could not find such case that meets the criteria specified")
-        return
-
-    # get fields names and index of te deleted field
-    columns = [column[0] for column in cursor.description]  
-    index = [column[0] for column in cursor.description].index('deleted')
-
-    for row in rows:
-        if(row[index] == None or row[index] > datetime.strptime(viewPointDate, "%d/%m/%Y %H:%M")): #no way that this throw excp?
-            printData(columns, row)
-            return
-            
-    print("could not find such case that meets the criteria specified")
-    return
-
-
-def history():
-    loinc = input("enter loinc-num or component : ")
-    first_name = input("enter first name: ")
-    last_name = input("enter last name: ")
-    dateDis = input("enter the valid date time and hour to display from, 0 hour for all day: ")
-    dateDis2 = ""
-    fromd = input("enter transaction time range, from (0 for 1/1/1900 till now, 0 at hour only = from 00:00):")
-    if (fromd != '0'):
-        tod = input("to transaction time date and hour (enter 0 at hour for 23:59): ")
-    else:
-        fromd = "1/1/1900 0:00"
-        tod = datetime.now().strftime("%d/%m/%Y %H:%M")
-    if(valid_date(fromd) == False or valid_date(tod) == False):
-        print("invalid dates range")
-        return
-    elif(valid_date(fromd) == 'special'):
-        if(valid_date(tod) == 'special'):
-            tod = tod[:-1] + "23:59" # not sure thats what she wants here, do i need to print an error? 
-        fromd = fromd[:-1] + "00:00"
-
-    validDate = valid_date(dateDis)
-    if(validDate == 'special'):
-        dateDis = dateDis[:-1]
-        dateDis2 = dateDis
-        dateDis += "00:00"
-        dateDis2 += "23:59"
-    elif(validDate == True):
-        dateDis2 = dateDis
-    else:
-        print("invalid date")
-
-    cursor.execute('SELECT * FROM medicalRecord WHERE [First name]=? and [Last name]=?\
-        and ([LOINC-NUM]=? or [LOINC-NUM]=?) and [Valid start time] between ? and ? and [Transaction time] between ? and ?',
-         first_name, last_name, loinc, loinc, dateDis, dateDis2, fromd, tod)
-
-    rows = cursor.fetchall()
-    if (len(rows) == 0):
-        print("could not find such case that meets the criteria specified")
-        return
-    columns = [column[0] for column in cursor.description]  
-    index = [column[0] for column in cursor.description].index('deleted')
-
-    for row in rows:
-        if(row[index] == None or row[index] > datetime.strptime(tod, "%d/%m/%Y %H:%M") or row[index] < datetime.strptime(fromd, "%d/%m/%Y %H:%M")): 
-            printData(columns, row)
-            return
-    return
-
-
-def update():
-    date = input("enter date of test enter 0 for now: ")
-    loinc = input("enter loinc num or component name: ")
-    first_name = input("enter first name: ")
-    last_name = input("enter last name: ")
-    validdate = input("enter valid time: ")
-    value = input("new value is: ")
-    if date == '0':
-        date = datetime.now().strftime("%d/%m/%Y %H:%M")
-    elif (valid_date(date) != True):
-        print("invalid date")
-        return
-    if (valid_date(validdate) != True):
-        print("invalid valid date time")
-        return
-
-    #coalesce()
-
-    cursor.execute('SELECT * FROM medicalRecord WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?)\
-        and [First name]=? and [Last name]=? and [Valid start time]=? order by [Transaction time] desc',
-                   loinc, loinc, first_name, last_name, validdate)
-
-    row = cursor.fetchone()
-     ## need to change here from row[5] to what alex did with row[9] ######################################
-    if(row):
-        cursor.execute('INSERT INTO medicalRecord ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time])\
-        values (?,?,?,?,?,?,?)', first_name, last_name, loinc, value, row[5], date, datetime.now().strftime("%d/%m/%Y %H:%M"))
-        cursor.commit()
-    else:
-        print("Could not Find such test to update or one of the arguments is incorrect \n")
-    return
-
-
-def delete():
-    deleted = input("deleted at:(enter 0 for now) ")
-    loinc = input("enter loinc-num or component name: ")
-    first_name = input("enter  ")
-    last_name = input("deleted at:(enter 0 for now) ")
-    valid = input("enter valid start time, enter 0 at hour for the latest update that day: ")
-    valid2 = ""
-
-    if(deleted == '0'):
-        deleted = datetime.now().strftime("%d/%m/%Y %H:%M")
-    elif (valid_date(deleted) != True):
-        print("invalid date")
-        return
-    validDate = valid_date(valid)
-    if(validDate == 'special'):
-        valid = valid[:-1]
-        valid2 = valid
-        valid += "00:00"
-        valid2 += "23:59"
-    elif(validDate == True):
-        valid2 = valid
-    else:
-        print("invalid date")
-
-    cursor.execute('SELECT * FROM medicalRecord WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?) and [First name]=?\
-        and [Last name]=? and [deleted]=? and [Valid start time] between ? and ? order by [Valid start time] desc',
-                   loinc, loinc, first_name, last_name, None, valid, valid2)
-
-    row = cursor.fetchone()
-    if(row):
-        id = row[0]
-        cursor.execute('UPDATE medicallRecord SET [deleted]=? WHERE [ID]=?', deleted,id)
-        # cursor.execute('UPDATE medicallRecord SET [deleted]=? WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?) and [First name]=?\
-        #     and [Last name]=? and [Valid start time] between ? and ? ',
-        #                deleted, loinc, loinc, first_name, last_name, valid, valid2)
-    else:
-        print("could not find such case that meets the criteria specified")
-
-    return
-
+        return     
 
 tasks = {
     1: select,
     2: history,
     3: update,
     4: delete,
-    #5: ChangeTable
+    5: changeTable
 }
 
 
 # The program UI
-db = lonicDB()
+db = lonicDB('medicalRecord')
 
 inp = ''
 while(True):
+    print()
     print('Please choose one of the following options (enter the number):\n\
 1. SELECT\n2. HISTORY\n3. UPDATE\n4. DELETE\n5. Change Table\n6. EXIT\n')
 
@@ -326,7 +332,7 @@ while(True):
     if inp == 6:
         break
     elif 0 < inp < 6:
-        tasks[inp]()
+        tasks[inp](db)
 
 
 # The program UI
