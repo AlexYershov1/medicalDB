@@ -17,7 +17,7 @@ def rIndex(s:str) -> int:
 def valid_date(s: str):
     try:
         mat = re.match(
-            '((\d{1,2})[/.-](\d{1,2})[/.-](\d{4})) (0|(\d{1,2}):(\d{1,2}))', s)
+            '((\d{1,2})[/.-](\d{1,2})[/.-](\d{4})) ((\d{1,2}):(\d{1,2}))|0', s)
         if mat is not None:
             # 1 is full date
             # 2 is day
