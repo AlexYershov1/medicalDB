@@ -10,7 +10,9 @@ def printData(columns, row) -> None:
     for column, word in zip(columns, row):
         print(column + ': ' + str(word) + ', ', end=' ')
     print()
-    
+
+def rIndex(s:str) -> int:
+    return [column[0] for column in cursor.description].index(s)
 
 def valid_date(s: str):
     try:
@@ -102,18 +104,18 @@ class lonicDB:
         else:
             print("invalid date")
             return
-
+        viewValid = valid_date(viewPointDate)
         if (viewPointDate == '0'):
             viewPointDate = datetime.now().strftime("%d/%m/%Y %H:%M")
-        elif(viewPointDate != True):
+        elif(viewValid != True):
             print("invalid searching at date")
             return
     
         #first_name, last_name, loinc, date, viewPointDate = 'Eyal', 'Rothman', '11218-5', '18-5-2018 11:00', datetime.now().strftime("%d/%m/%Y %H:%M")
         #date2 = date
-        cursor.execute(f'SELECT * FROM {self.name} WHERE [First name]=? and [Last name]=? and [LOINC-NUM]=?\
+        cursor.execute(f'SELECT * FROM {self.name} WHERE [First name]=? and [Last name]=? and ([LOINC-NUM]=? or [LONG_COMMON_NAME]=?)\
             and [Valid start time] between ? and ? and [Transaction time] <= ? order by [Valid start time] desc',
-                    first_name, last_name, loinc, date, date2, viewPointDate)
+                    first_name, last_name, loinc,loinc, date, date2, viewPointDate)
 
         rows = cursor.fetchall()
         if (len(rows) == 0):
@@ -121,7 +123,7 @@ class lonicDB:
             return
 
         # get fields names and index of te deleted field
-        columns = [column[0] for column in cursor.description]  
+        columns = [column[0] for column in cursor.description]
         index = [column[0] for column in cursor.description].index('deleted')
 
         for row in rows:
@@ -150,7 +152,7 @@ class lonicDB:
             return
         elif(valid_date(fromd) == 'special'):
             if(valid_date(tod) == 'special'):
-                tod = tod[:-1] + "23:59" # not sure thats what she wants here, do i need to print an error? 
+                tod = tod[:-1] + "23:59" 
             fromd = fromd[:-1] + "00:00"
 
         validDate = valid_date(dateDis)
@@ -165,7 +167,7 @@ class lonicDB:
             print("invalid date")
 
         cursor.execute(f'SELECT * FROM {self.name} WHERE [First name]=? and [Last name]=?\
-            and ([LOINC-NUM]=? or [LOINC-NUM]=?) and [Valid start time] between ? and ? and [Transaction time] between ? and ?',
+            and ([LOINC-NUM]=? or [LONG_COMMON_NAME]=?) and [Valid start time] between ? and ? and [Transaction time] between ? and ?',
             first_name, last_name, loinc, loinc, dateDis, dateDis2, fromd, tod)
 
         rows = cursor.fetchall()
@@ -181,8 +183,12 @@ class lonicDB:
                 return
         return
 
-
-    def update(self):
+    def update(self,readinp = 1 , date = "0" , loinc = "0", first_name =  "0", last_name =  "0",unit =  "0", value = "0", delete = None, commonname = None, trans= "0", tname = "0"):
+        if(readinp == 0):
+            cursor.execute(f'INSERT INTO {tname} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [deleted], [LONG_COMMON_NAME])\
+                values (?,?,?,?,?,?,?,?,?)', first_name, last_name, loinc, value, unit, date, trans,delete, commonname)
+            cursor.commit()
+            return
         date = input("enter date of test enter 0 for now: ")
         loinc = input("enter loinc num or component name: ")
         first_name = input("enter first name: ")
@@ -199,16 +205,23 @@ class lonicDB:
             return
 
 
-        cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?)\
+        cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LONG_COMMON_NAME]=?)\
             and [First name]=? and [Last name]=? and [Valid start time]=? order by [Transaction time] desc',
                     loinc, loinc, first_name, last_name, validdate)
 
         row = cursor.fetchone()
-        ## need to change here from row[5] to what alex did with row[9] ######################################
         if(row):
-            cursor.execute(f'INSERT INTO {self.name} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time])\
-            values (?,?,?,?,?,?,?)', first_name, last_name, loinc, value, row[5], date, datetime.now().strftime("%d/%m/%Y %H:%M"))
+            cursor.execute(f'INSERT INTO {self.name} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [LONG_COMMON_NAME])\
+            values (?,?,?,?,?,?,?)', first_name, last_name, row[rIndex('LOINC-NUM')], value, row[rIndex('Unit')], date, datetime.now().strftime("%d/%m/%Y %H:%M"), row[rIndex('LONG_COMMON_NAME')])
             cursor.commit()
+
+            Rbefore = row
+            Rafter = row
+            Rafter[rIndex('Transaction time')] = datetime.now().strftime("%d/%m/%Y %H:%M")
+            print("Before change: ")
+            printData(Rbefore)
+            print("After change: ")
+            printData(Rafter)
         else:
             print("Could not Find such test to update or one of the arguments is incorrect \n")
         return
@@ -238,7 +251,7 @@ class lonicDB:
         else:
             print("invalid date")
 
-        cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?) and [First name]=?\
+        cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LONG_COMMON_NAME]=?) and [First name]=?\
             and [Last name]=? and [deleted]=? and [Valid start time] between ? and ? order by [Valid start time] desc',
                     loinc, loinc, first_name, last_name, None, valid, valid2)
 
@@ -246,9 +259,13 @@ class lonicDB:
         if(row):
             id = row[0]
             cursor.execute(f'UPDATE {self.name} SET [deleted]=? WHERE [ID]=?', deleted,id)
-            # cursor.execute('UPDATE medicallRecord SET [deleted]=? WHERE ([LOINC-NUM]=? or [LOINC-NUM]=?) and [First name]=?\
-            #     and [Last name]=? and [Valid start time] between ? and ? ',
-            #                deleted, loinc, loinc, first_name, last_name, valid, valid2)
+            Rbefore = row
+            Rafter = row
+            Rafter[rIndex('deleted')] = deleted
+            print("Before change: ")
+            printData(Rbefore)
+            print("After change: ")
+            printData(Rafter)
         else:
             print("could not find such case that meets the criteria specified")
 
@@ -261,8 +278,8 @@ def select(db: lonicDB):
 def history(db: lonicDB):
     db.history()
 
-def update(db: lonicDB):
-    db.update()
+def update(db: lonicDB,readinp ="0", date ="0" , loinc ="0", first_name ="0", last_name="0",unit="0", value ="0", delete="0", commonname ="0", trans="0", tname ="0"):
+    db.update(readinp, date, loinc, first_name,last_name,unit, value, delete, commonname, trans,tname)
 
 def delete(db: lonicDB):
     db.delete()
@@ -285,9 +302,13 @@ def changeTable(dbPuppet: lonicDB):
                 #   UNION ALL SELECT [ID], [First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [deleted], [LONG_COMMON_NAME] FROM {newTable}')
                 cursor.execute(f'SELECT * FROM {newTable}')
                 rows = cursor.fetchall()
+                cursor.execute(f'SELECT * FROM {db.name}')
                 for row in rows:
-                    cursor.execute(f'INSERT INTO {db.name} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [deleted], [LONG_COMMON_NAME]) values (?,?,?,?,?,?,?,?,?)', row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
-                cursor.commit
+                    update(db, 0 , row[rIndex('Valid start time')], row[rIndex('LOINC-NUM')],row[rIndex('First name')],
+                     row[rIndex('Last name')], row[rIndex('Unit')], row[rIndex('Value')], row[rIndex('deleted')],
+                      row[rIndex('LONG_COMMON_NAME')],row[rIndex('Transaction time')], db.name)
+                #cursor.execute(f'INSERT INTO medicalRecord ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [deleted], [LONG_COMMON_NAME]) values (?,?,?,?,?,?,?,?,?)', row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9])
+                #cursor.commit
 
                 return
             except:
@@ -298,6 +319,7 @@ def changeTable(dbPuppet: lonicDB):
             newTable = input('Enter new table name or c to cancel: ')
             try:
                 assert cursor.execute(f'SELECT * FROM {newTable}')
+                rows = cursor.fetchall()
                 db = lonicDB(newTable)
                 print('switch complete')
                 return
