@@ -1,7 +1,7 @@
 import pyodbc
 import re
 from datetime import datetime
-
+import copy
 print('Initiated program')
 
 def printData(columns, row) -> None:
@@ -17,7 +17,7 @@ def rIndex(s:str) -> int:
 def valid_date(s: str):
     try:
         mat = re.match(
-            '((\d{1,2})[/.-](\d{1,2})[/.-](\d{4})) ((\d{1,2}):(\d{1,2}))|0', s)
+            '((\d{1,2})[/.-](\d{1,2})[/.-](\d{4})) ((\d{1,2}):(\d{1,2})|0)', s)
         if mat is not None:
             # 1 is full date
             # 2 is day
@@ -90,7 +90,7 @@ class lonicDB:
         loinc = input("enter lonic-num or component: ")
         first_name = input("enter first name: ")
         last_name = input("enter last name: ")
-        date = input("date: ")
+        date = input("Valid date: ")
         viewPointDate = input("searching at(enter 0 for now): ")
         date2 =""
         datevalid = valid_date(date)
@@ -175,12 +175,12 @@ class lonicDB:
             print("could not find such case that meets the criteria specified")
             return
         columns = [column[0] for column in cursor.description]  
-        index = [column[0] for column in cursor.description].index('deleted')
+        index = rIndex('deleted')
 
         for row in rows:
             if(row[index] == None or row[index] > datetime.strptime(tod, "%d/%m/%Y %H:%M") or row[index] < datetime.strptime(fromd, "%d/%m/%Y %H:%M")): 
                 printData(columns, row)
-                return
+                
         return
 
     def update(self,readinp = 1 , date = "0" , loinc = "0", first_name =  "0", last_name =  "0",unit =  "0", value = "0", delete = None, commonname = None, trans= "0", tname = "0"):
@@ -211,28 +211,30 @@ class lonicDB:
 
         row = cursor.fetchone()
         if(row):
+            columns = [column[0] for column in cursor.description]  
+            Rbefore = copy.deepcopy(row)
+            Rafter = copy.deepcopy(row)
+            Rafter[rIndex('Transaction time')] = datetime.now().strftime("%d/%m/%Y %H:%M")
+            Rafter[rIndex('Value')] = value
             cursor.execute(f'INSERT INTO {self.name} ([First name], [Last name], [LOINC-NUM], [Value], [Unit], [Valid start time], [Transaction time], [LONG_COMMON_NAME])\
-            values (?,?,?,?,?,?,?)', first_name, last_name, row[rIndex('LOINC-NUM')], value, row[rIndex('Unit')], date, datetime.now().strftime("%d/%m/%Y %H:%M"), row[rIndex('LONG_COMMON_NAME')])
+            values (?,?,?,?,?,?,?,?)', first_name, last_name, row[rIndex('LOINC-NUM')], value, row[rIndex('Unit')], date, datetime.now().strftime("%d/%m/%Y %H:%M"), row[rIndex('LONG_COMMON_NAME')])
             cursor.commit()
 
-            Rbefore = row
-            Rafter = row
-            Rafter[rIndex('Transaction time')] = datetime.now().strftime("%d/%m/%Y %H:%M")
             print("Before change: ")
-            printData(Rbefore)
+            printData(columns,Rbefore)
             print("After change: ")
-            printData(Rafter)
+            printData(columns,Rafter)
         else:
             print("Could not Find such test to update or one of the arguments is incorrect \n")
         return
 
 
     def delete(self):
-        deleted = input("deleted at:(enter 0 for now) ")
-        loinc = input("enter loinc-num or component name: ")
-        first_name = input("enter  ")
-        last_name = input("deleted at:(enter 0 for now) ")
-        valid = input("enter valid start time, enter 0 at hour for the latest update that day: ")
+        deleted = input("Deleted at:(enter 0 for now) ")
+        loinc = input("Enter loinc-num or component name: ")
+        first_name = input("Enter First name: ")
+        last_name = input("Enter Last name: ")
+        valid = input("Enter valid start time, enter 0 at hour for the latest update that day: ")
         valid2 = ""
 
         if(deleted == '0'):
@@ -252,20 +254,24 @@ class lonicDB:
             print("invalid date")
 
         cursor.execute(f'SELECT * FROM {self.name} WHERE ([LOINC-NUM]=? or [LONG_COMMON_NAME]=?) and [First name]=?\
-            and [Last name]=? and [deleted]=? and [Valid start time] between ? and ? order by [Valid start time] desc',
-                    loinc, loinc, first_name, last_name, None, valid, valid2)
+            and [Last name]=? and [Valid start time] between ? and ? order by [Valid start time] desc',
+                    loinc, loinc, first_name, last_name, valid, valid2)
 
         row = cursor.fetchone()
         if(row):
             id = row[0]
-            cursor.execute(f'UPDATE {self.name} SET [deleted]=? WHERE [ID]=?', deleted,id)
-            Rbefore = row
-            Rafter = row
+            columns = [column[0] for column in cursor.description]  
+            Rbefore = copy.deepcopy(row)
+            Rafter = copy.deepcopy(row)
             Rafter[rIndex('deleted')] = deleted
-            print("Before change: ")
-            printData(Rbefore)
+
+            cursor.execute(f'UPDATE {self.name} SET [deleted]=? WHERE [ID]=?', deleted,id)
+            cursor.commit()
+            
+            print("Before change: ") 
+            printData(columns ,Rbefore)
             print("After change: ")
-            printData(Rafter)
+            printData(columns ,Rafter)
         else:
             print("could not find such case that meets the criteria specified")
 
